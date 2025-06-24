@@ -1,0 +1,4 @@
+package br.com.pousda.pousada.service;
+
+public class SaidaService {
+}
