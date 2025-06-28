@@ -1,4 +1,9 @@
 package br.com.pousda.pousada.model.enums;
 
-public class TipoHospedagem {
+
+public enum TipoHospedagem {
+
+    NORMAL,
+    CORPORATIVO,
+    PREFEITURA
 }
