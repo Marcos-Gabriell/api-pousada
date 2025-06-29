@@ -27,17 +27,20 @@ public class HospedagemService {
     private QuartoRepository quartoRepository;
 
     public Hospedagem realizarCheckin(HospedagemDTO hospedagemDTO) {
+        if (hospedagemDTO.getNome() == null || hospedagemDTO.getNome().trim().isEmpty())
+            throw new CampoObrigatorioException("Nome é obrigatório.");
+
+        if (hospedagemDTO.getFormaPagamento() == null || hospedagemDTO.getFormaPagamento().trim().isEmpty())
+            throw new CampoObrigatorioException("Forma de pagamento é obrigatória.");
 
         Quarto quarto = quartoRepository.findByNumero(hospedagemDTO.getNumeroQuarto())
                 .orElseThrow(() -> new QuartoNaoEncontradoException(hospedagemDTO.getNumeroQuarto()));
-
         if (quarto.isOcupado()) {
             throw new QuartoOcupadoException("O quarto " + quarto.getNumero() + " já está ocupado.");
         }
 
         LocalDate dataEntrada = LocalDate.now();
         LocalDate dataSaida = hospedagemDTO.getDataSaida();
-
         if (dataSaida == null || !dataSaida.isAfter(dataEntrada)) {
             throw new DataInvalidaException("A data de saída deve ser posterior à data atual.");
         }
@@ -46,10 +49,8 @@ public class HospedagemService {
             throw new ValorInvalidoException("Valor da diária inválido.");
         }
 
-        if (hospedagemDTO.getValorTotal() == null || hospedagemDTO.getValorTotal() <= 0) {
-            throw new ValorInvalidoException("Valor total inválido.");
-        }
-
+        long diasHospedados = Duration.between(dataEntrada.atStartOfDay(), dataSaida.atStartOfDay()).toDays();
+        double valorTotal = hospedagemDTO.getValorDiaria() * diasHospedados;
 
         Hospedagem hospedagem = new Hospedagem();
         hospedagem.setNome(hospedagemDTO.getNome());
@@ -57,19 +58,17 @@ public class HospedagemService {
         hospedagem.setDataEntrada(dataEntrada);
         hospedagem.setDataSaida(dataSaida);
         hospedagem.setValorDiaria(hospedagemDTO.getValorDiaria());
-        hospedagem.setValorTotal(hospedagemDTO.getValorTotal());
+        hospedagem.setValorTotal(valorTotal);
         hospedagem.setFormaPagamento(hospedagemDTO.getFormaPagamento());
         hospedagem.setObservacoes(hospedagemDTO.getObservacoes());
         hospedagem.setQuarto(quarto);
 
-        long diasHospedados = Duration.between(dataEntrada.atStartOfDay(), dataSaida.atStartOfDay()).toDays();
-
-        if (diasHospedados <= 3) {
-            hospedagem.setTipo(TipoHospedagem.NORMAL);
-        } else if (hospedagem.getCpf() == null || hospedagem.getCpf().isBlank()) {
+        if (hospedagemDTO.getCpf() != null && !hospedagemDTO.getCpf().isBlank()) {
+            hospedagem.setTipo(TipoHospedagem.PREFEITURA);
+        } else if (diasHospedados > 3) {
             hospedagem.setTipo(TipoHospedagem.CORPORATIVO);
         } else {
-            hospedagem.setTipo(TipoHospedagem.PREFEITURA);
+            hospedagem.setTipo(TipoHospedagem.NORMAL);
         }
 
         quarto.setOcupado(true);
@@ -78,7 +77,15 @@ public class HospedagemService {
         return hospedagemRepository.save(hospedagem);
     }
 
+
     public Hospedagem realizarCheckoutPorNumero(CheckoutDTO checkoutDTO) {
+        if (checkoutDTO.getNumeroQuarto() == null || checkoutDTO.getNumeroQuarto().trim().isEmpty()) {
+            throw  new CampoObrigatorioException("Número do quarto é obrigatório");
+        }
+        if (checkoutDTO.getDescricao() == null || checkoutDTO.getDescricao().trim().isEmpty()) {
+            throw new CampoObrigatorioException("Descrição do motivo da saída é obrigatória.");
+        }
+
         Quarto quarto = quartoRepository.findByNumero(checkoutDTO.getNumeroQuarto())
                 .orElseThrow(() -> new QuartoNaoEncontradoException(checkoutDTO.getNumeroQuarto()));
 
@@ -89,14 +96,21 @@ public class HospedagemService {
         Hospedagem hospedagem = hospedagemRepository.findTopByQuartoOrderByIdDesc(quarto)
                 .orElseThrow(() -> new HospedagemAtivaNaoEncontradaException("Nenhuma hospedagem ativa encontrada para o quarto: " + quarto.getNumero()));
 
-        hospedagem.setDataSaida(LocalDate.now());
+        LocalDate dataHoje = LocalDate.now();
+        LocalDate dataEntrada = hospedagem.getDataEntrada();
+
+        long diasHospedados = Duration.between(dataEntrada.atStartOfDay(), dataHoje.atStartOfDay()).toDays();
+        if (diasHospedados <= 0) diasHospedados = 1;
+
+        hospedagem.setDataSaida(dataHoje);
+
+        double valorTotal = hospedagem.getValorDiaria() * diasHospedados;
+        hospedagem.setValorTotal(valorTotal);
 
         String novaObs = checkoutDTO.getDescricao();
-        if (novaObs != null && !novaObs.isBlank()) {
-            hospedagem.setObservacoes(
-                    (hospedagem.getObservacoes() != null ? hospedagem.getObservacoes() + " | " : "") + novaObs
-            );
-        }
+        hospedagem.setObservacoes(
+                (hospedagem.getObservacoes() != null ? hospedagem.getObservacoes() + " | " : "") + novaObs
+        );
 
         quarto.setOcupado(false);
         quartoRepository.save(quarto);
@@ -104,7 +118,9 @@ public class HospedagemService {
         return hospedagemRepository.save(hospedagem);
     }
 
-    public List<Hospedagem> listarHospedagens(String nome, TipoHospedagem tipo, LocalDate dataEntrada, Boolean checkout) {
+
+
+    public List<Hospedagem> listarHospedagens(String nome, TipoHospedagem tipo, LocalDate dataEntrada) {
         List<Hospedagem> todas = hospedagemRepository.findAll();
         LocalDate hoje = LocalDate.now();
 
@@ -112,12 +128,10 @@ public class HospedagemService {
                 .filter(h -> nome == null || (h.getNome() != null && h.getNome().toLowerCase().contains(nome.toLowerCase())))
                 .filter(h -> tipo == null || h.getTipo() == tipo)
                 .filter(h -> dataEntrada == null || dataEntrada.equals(h.getDataEntrada()))
-                .filter(h -> checkout == null ||
-                        (checkout && h.getDataSaida() != null && !h.getDataSaida().isAfter(hoje)) ||
-                        (!checkout && (h.getDataSaida() == null || h.getDataSaida().isAfter(hoje)))
-                )
+                .filter(h -> h.getDataSaida() == null || h.getDataSaida().isAfter(hoje))
                 .collect(Collectors.toList());
     }
+
 
     public List<Hospedagem> buscarHospedagensFiltradas(LocalDate dataInicio, LocalDate dataFim, TipoHospedagem tipo, String nome, Boolean ativo) {
         List<Hospedagem> todas = hospedagemRepository.findAll();

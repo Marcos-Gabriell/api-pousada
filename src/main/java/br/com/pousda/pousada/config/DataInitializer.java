@@ -1,10 +1,13 @@
 package br.com.pousda.pousada.config;
 
 import br.com.pousda.pousada.model.FechamentoCaixa;
+import br.com.pousda.pousada.model.Hospedagem;
+import br.com.pousda.pousada.model.Quarto;
 import br.com.pousda.pousada.model.enums.TipoFechamento;
+import br.com.pousda.pousada.model.enums.TipoHospedagem;
 import br.com.pousda.pousada.repository.FechamentoCaixaRepository;
+import br.com.pousda.pousada.repository.HospedagemRepository;
 import br.com.pousda.pousada.repository.QuartoRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,23 +18,42 @@ import java.time.LocalDate;
 public class DataInitializer {
 
     @Bean
-    public CommandLineRunner initDatabase(QuartoRepository quartoRepository, FechamentoCaixaRepository fechamentoCaixaRepository) {
+    public CommandLineRunner initDatabase(
+            QuartoRepository quartoRepository,
+            FechamentoCaixaRepository fechamentoCaixaRepository,
+            HospedagemRepository hospedagemRepository) {
         return args -> {
 
+            // Criação dos quartos
             int[] numeros = {1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 16, 70};
             for (int numero : numeros) {
                 if (!quartoRepository.existsByNumero(String.valueOf(numero))) {
-                    var quarto = new br.com.pousda.pousada.model.Quarto();
-                    quarto.setId((long) numero);
+                    Quarto quarto = new Quarto();
                     quarto.setNumero(String.valueOf(numero));
                     quarto.setOcupado(false);
                     quartoRepository.save(quarto);
                 }
             }
 
+            // Criação de uma hospedagem antiga finalizada para teste
+            Quarto quarto = quartoRepository.findByNumero("8").orElse(null);
+            if (quarto != null) {
+                Hospedagem antiga = new Hospedagem();
+                antiga.setNome("Marcos");
+                antiga.setCpf("111.222.333-44");
+                antiga.setTipo(TipoHospedagem.NORMAL);
+                antiga.setQuarto(quarto);
+                antiga.setDataEntrada(LocalDate.of(2024, 12, 20));
+                antiga.setDataSaida(LocalDate.of(2024, 12, 25));
+                antiga.setValorDiaria(100.0);
+                antiga.setValorTotal(500.0); // 5 dias x 100
+                antiga.setFormaPagamento("Dinheiro");
+                antiga.setObservacoes("Exemplo de hospedagem finalizada.");
+                hospedagemRepository.save(antiga);
+            }
+
+            // Fechamentos de caixa
             if (fechamentoCaixaRepository.count() == 0) {
-
-
                 FechamentoCaixa semanal = new FechamentoCaixa();
                 semanal.setInicioPeriodo(LocalDate.of(2025, 6, 10));
                 semanal.setFimPeriodo(LocalDate.of(2025, 6, 16));
