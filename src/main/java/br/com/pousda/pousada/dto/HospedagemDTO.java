@@ -15,6 +15,7 @@ public class HospedagemDTO {
     private String cpf;
     private LocalDate dataSaida;
     private Double valorDiaria;
+    private Integer numeroDiarias;
     private Double valorTotal;
     private String formaPagamento;
     private String observacoes;

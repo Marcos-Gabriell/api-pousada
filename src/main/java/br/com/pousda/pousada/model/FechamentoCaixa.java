@@ -33,4 +33,6 @@ public class FechamentoCaixa {
     @Enumerated(EnumType.STRING)
     private TipoFechamento tipo;
 
+
+
 }

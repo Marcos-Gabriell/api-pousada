@@ -17,6 +17,7 @@ public class HospedagemResponseDTO {
     private String cpf;
     private LocalDate dataEntrada;
     private LocalDate dataSaida;
+    private Integer numeroDiarias;
     private Double valorDiaria;
     private Double valorTotal;
     private String formaPagamento;
@@ -25,3 +26,4 @@ public class HospedagemResponseDTO {
     private Boolean ocupado;
     private String status;
 }
+

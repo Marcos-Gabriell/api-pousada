@@ -24,7 +24,6 @@ public class DataInitializer {
             HospedagemRepository hospedagemRepository) {
         return args -> {
 
-            // Criação dos quartos
             int[] numeros = {1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 16, 70};
             for (int numero : numeros) {
                 if (!quartoRepository.existsByNumero(String.valueOf(numero))) {
@@ -35,7 +34,6 @@ public class DataInitializer {
                 }
             }
 
-            // Criação de uma hospedagem antiga finalizada para teste
             Quarto quarto = quartoRepository.findByNumero("8").orElse(null);
             if (quarto != null) {
                 Hospedagem antiga = new Hospedagem();
@@ -46,7 +44,7 @@ public class DataInitializer {
                 antiga.setDataEntrada(LocalDate.of(2024, 12, 20));
                 antiga.setDataSaida(LocalDate.of(2024, 12, 25));
                 antiga.setValorDiaria(100.0);
-                antiga.setValorTotal(500.0); // 5 dias x 100
+                antiga.setValorTotal(500.0);
                 antiga.setFormaPagamento("Dinheiro");
                 antiga.setObservacoes("Exemplo de hospedagem finalizada.");
                 hospedagemRepository.save(antiga);

@@ -20,6 +20,12 @@ public class QuartoController {
         return quartoService.listarTodos();
     }
 
+    @GetMapping("/disponiveis")
+    public List<Quarto> listarQuartosDisponiveis() {
+        return quartoService.listarDisponiveis();
+    }
+
+
     @PutMapping("/{id}/status")
     public ResponseEntity<Quarto> atualizarStatus(
             @PathVariable Long id,

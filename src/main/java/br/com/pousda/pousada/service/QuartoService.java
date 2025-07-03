@@ -17,6 +17,11 @@ public class QuartoService {
         return quartoRepository.findAll();
     }
 
+    public List<Quarto> listarDisponiveis() {
+        return quartoRepository.findByOcupadoFalse();
+    }
+
+
     public Quarto atualizarStatus(Long id, boolean ocupado) {
         Quarto quarto = quartoRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Quarto não encontrado"));

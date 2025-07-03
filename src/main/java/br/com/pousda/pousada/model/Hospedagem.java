@@ -42,4 +42,9 @@ public class Hospedagem {
 
     @ManyToOne
     private Quarto quarto;
+
+    @Column(nullable = false)
+    private Boolean cancelada = false;
+
+    private String motivoCancelamento;
 }

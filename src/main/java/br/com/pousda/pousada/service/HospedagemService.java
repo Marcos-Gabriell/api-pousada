@@ -12,8 +12,8 @@ import br.com.pousda.pousada.repository.QuartoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -33,24 +33,23 @@ public class HospedagemService {
         if (hospedagemDTO.getFormaPagamento() == null || hospedagemDTO.getFormaPagamento().trim().isEmpty())
             throw new CampoObrigatorioException("Forma de pagamento é obrigatória.");
 
-        Quarto quarto = quartoRepository.findByNumero(hospedagemDTO.getNumeroQuarto())
-                .orElseThrow(() -> new QuartoNaoEncontradoException(hospedagemDTO.getNumeroQuarto()));
-        if (quarto.isOcupado()) {
-            throw new QuartoOcupadoException("O quarto " + quarto.getNumero() + " já está ocupado.");
-        }
-
-        LocalDate dataEntrada = LocalDate.now();
-        LocalDate dataSaida = hospedagemDTO.getDataSaida();
-        if (dataSaida == null || !dataSaida.isAfter(dataEntrada)) {
-            throw new DataInvalidaException("A data de saída deve ser posterior à data atual.");
-        }
+        if (hospedagemDTO.getNumeroDiarias() == null || hospedagemDTO.getNumeroDiarias() <= 0)
+            throw new CampoObrigatorioException("O número de diárias deve ser maior que zero.");
 
         if (hospedagemDTO.getValorDiaria() == null || hospedagemDTO.getValorDiaria() <= 0) {
             throw new ValorInvalidoException("Valor da diária inválido.");
         }
 
-        long diasHospedados = Duration.between(dataEntrada.atStartOfDay(), dataSaida.atStartOfDay()).toDays();
-        double valorTotal = hospedagemDTO.getValorDiaria() * diasHospedados;
+        Quarto quarto = quartoRepository.findByNumero(hospedagemDTO.getNumeroQuarto())
+                .orElseThrow(() -> new QuartoNaoEncontradoException(hospedagemDTO.getNumeroQuarto()));
+
+        if (quarto.isOcupado()) {
+            throw new QuartoOcupadoException("O quarto " + quarto.getNumero() + " já está ocupado.");
+        }
+
+        LocalDate dataEntrada = LocalDate.now();
+        LocalDate dataSaida = dataEntrada.plusDays(hospedagemDTO.getNumeroDiarias());
+        double valorTotal = hospedagemDTO.getValorDiaria() * hospedagemDTO.getNumeroDiarias();
 
         Hospedagem hospedagem = new Hospedagem();
         hospedagem.setNome(hospedagemDTO.getNome());
@@ -65,7 +64,7 @@ public class HospedagemService {
 
         if (hospedagemDTO.getCpf() != null && !hospedagemDTO.getCpf().isBlank()) {
             hospedagem.setTipo(TipoHospedagem.PREFEITURA);
-        } else if (diasHospedados > 3) {
+        } else if (hospedagemDTO.getNumeroDiarias() > 3) {
             hospedagem.setTipo(TipoHospedagem.CORPORATIVO);
         } else {
             hospedagem.setTipo(TipoHospedagem.NORMAL);
@@ -77,10 +76,9 @@ public class HospedagemService {
         return hospedagemRepository.save(hospedagem);
     }
 
-
     public Hospedagem realizarCheckoutPorNumero(CheckoutDTO checkoutDTO) {
         if (checkoutDTO.getNumeroQuarto() == null || checkoutDTO.getNumeroQuarto().trim().isEmpty()) {
-            throw  new CampoObrigatorioException("Número do quarto é obrigatório");
+            throw new CampoObrigatorioException("Número do quarto é obrigatório");
         }
         if (checkoutDTO.getDescricao() == null || checkoutDTO.getDescricao().trim().isEmpty()) {
             throw new CampoObrigatorioException("Descrição do motivo da saída é obrigatória.");
@@ -99,7 +97,7 @@ public class HospedagemService {
         LocalDate dataHoje = LocalDate.now();
         LocalDate dataEntrada = hospedagem.getDataEntrada();
 
-        long diasHospedados = Duration.between(dataEntrada.atStartOfDay(), dataHoje.atStartOfDay()).toDays();
+        long diasHospedados = ChronoUnit.DAYS.between(dataEntrada, dataHoje);
         if (diasHospedados <= 0) diasHospedados = 1;
 
         hospedagem.setDataSaida(dataHoje);
@@ -118,13 +116,12 @@ public class HospedagemService {
         return hospedagemRepository.save(hospedagem);
     }
 
-
-
     public List<Hospedagem> listarHospedagens(String nome, TipoHospedagem tipo, LocalDate dataEntrada) {
         List<Hospedagem> todas = hospedagemRepository.findAll();
         LocalDate hoje = LocalDate.now();
 
         return todas.stream()
+                .filter(h -> !Boolean.TRUE.equals(h.getCancelada()))
                 .filter(h -> nome == null || (h.getNome() != null && h.getNome().toLowerCase().contains(nome.toLowerCase())))
                 .filter(h -> tipo == null || h.getTipo() == tipo)
                 .filter(h -> dataEntrada == null || dataEntrada.equals(h.getDataEntrada()))
@@ -132,12 +129,19 @@ public class HospedagemService {
                 .collect(Collectors.toList());
     }
 
-
-    public List<Hospedagem> buscarHospedagensFiltradas(LocalDate dataInicio, LocalDate dataFim, TipoHospedagem tipo, String nome, Boolean ativo) {
+    public List<Hospedagem> buscarHospedagensFiltradas(
+            LocalDate dataInicio,
+            LocalDate dataFim,
+            TipoHospedagem tipo,
+            String nome,
+            Boolean ativo,
+            Boolean incluirCanceladas
+    ) {
         List<Hospedagem> todas = hospedagemRepository.findAll();
         LocalDate hoje = LocalDate.now();
 
         return todas.stream()
+                .filter(h -> Boolean.TRUE.equals(incluirCanceladas) || !Boolean.TRUE.equals(h.getCancelada()))
                 .filter(h -> nome == null || (h.getNome() != null && h.getNome().toLowerCase().contains(nome.toLowerCase())))
                 .filter(h -> tipo == null || h.getTipo() == tipo)
                 .filter(h -> (dataInicio == null || !h.getDataEntrada().isBefore(dataInicio)) &&
@@ -150,6 +154,10 @@ public class HospedagemService {
 
     public HospedagemResponseDTO toResponseDTO(Hospedagem h) {
         String status = (h.getDataSaida() == null || h.getDataSaida().isAfter(LocalDate.now())) ? "Ativo" : "Inativo";
+        Integer numeroDiarias = null;
+        if (h.getDataEntrada() != null && h.getDataSaida() != null) {
+            numeroDiarias = (int) ChronoUnit.DAYS.between(h.getDataEntrada(), h.getDataSaida());
+        }
         return new HospedagemResponseDTO(
                 h.getId(),
                 h.getTipo().toString(),
@@ -157,6 +165,7 @@ public class HospedagemService {
                 h.getCpf(),
                 h.getDataEntrada(),
                 h.getDataSaida(),
+                numeroDiarias,
                 h.getValorDiaria(),
                 h.getValorTotal(),
                 h.getFormaPagamento(),
@@ -166,4 +175,57 @@ public class HospedagemService {
                 status
         );
     }
+
+    public Hospedagem editarHospedagem(Long id, HospedagemDTO dto) {
+        Hospedagem hospedagem = hospedagemRepository.findById(id)
+                .orElseThrow(() -> new HospedagemNaoEncontradaException("Hospedagem não encontrada."));
+
+        if (Boolean.TRUE.equals(hospedagem.getCancelada())) {
+            throw new OperacaoNaoPermitidaException("Hospedagem já está cancelada.");
+        }
+        if (hospedagem.getDataSaida() != null && !hospedagem.getDataSaida().isAfter(LocalDate.now())) {
+            throw new OperacaoNaoPermitidaException("Não é possível editar uma hospedagem já finalizada.");
+        }
+
+        // Atualiza número de diárias/data de saída
+        if (dto.getNumeroDiarias() != null && dto.getNumeroDiarias() > 0) {
+            hospedagem.setDataSaida(hospedagem.getDataEntrada().plusDays(dto.getNumeroDiarias()));
+            hospedagem.setValorTotal(hospedagem.getValorDiaria() * dto.getNumeroDiarias());
+        }
+
+        // Atualiza observações ou forma de pagamento, se informado
+        if (dto.getObservacoes() != null) {
+            hospedagem.setObservacoes(dto.getObservacoes());
+        }
+        if (dto.getFormaPagamento() != null) {
+            hospedagem.setFormaPagamento(dto.getFormaPagamento());
+        }
+
+        // Permite troca de quarto, se informado e for diferente
+        if (dto.getNumeroQuarto() != null &&
+                !dto.getNumeroQuarto().equals(hospedagem.getQuarto().getNumero())) {
+
+            Quarto novoQuarto = quartoRepository.findByNumero(dto.getNumeroQuarto())
+                    .orElseThrow(() -> new QuartoNaoEncontradoException(dto.getNumeroQuarto()));
+
+            if (novoQuarto.isOcupado()) {
+                throw new QuartoOcupadoException("O quarto " + novoQuarto.getNumero() + " já está ocupado.");
+            }
+
+            // Libera o quarto antigo
+            hospedagem.getQuarto().setOcupado(false);
+            quartoRepository.save(hospedagem.getQuarto());
+
+            // Ocupa o novo quarto
+            novoQuarto.setOcupado(true);
+            quartoRepository.save(novoQuarto);
+
+            // Atualiza hospedagem
+            hospedagem.setQuarto(novoQuarto);
+        }
+
+        return hospedagemRepository.save(hospedagem);
+    }
+
+
 }
