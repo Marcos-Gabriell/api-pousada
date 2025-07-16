@@ -3,8 +3,10 @@ package br.com.pousda.pousada.config;
 import br.com.pousda.pousada.model.FechamentoCaixa;
 import br.com.pousda.pousada.model.Hospedagem;
 import br.com.pousda.pousada.model.Quarto;
+import br.com.pousda.pousada.model.enums.StatusQuarto;
 import br.com.pousda.pousada.model.enums.TipoFechamento;
 import br.com.pousda.pousada.model.enums.TipoHospedagem;
+import br.com.pousda.pousada.model.enums.TipoQuarto;
 import br.com.pousda.pousada.repository.FechamentoCaixaRepository;
 import br.com.pousda.pousada.repository.HospedagemRepository;
 import br.com.pousda.pousada.repository.QuartoRepository;
@@ -24,17 +26,8 @@ public class DataInitializer {
             HospedagemRepository hospedagemRepository) {
         return args -> {
 
-            int[] numeros = {1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 16, 70};
-            for (int numero : numeros) {
-                if (!quartoRepository.existsByNumero(String.valueOf(numero))) {
-                    Quarto quarto = new Quarto();
-                    quarto.setNumero(String.valueOf(numero));
-                    quarto.setOcupado(false);
-                    quartoRepository.save(quarto);
-                }
-            }
-
-            Quarto quarto = quartoRepository.findByNumero("8").orElse(null);
+            // Hospedagem exemplo
+            Quarto quarto = quartoRepository.findByNumero("2").orElse(null);
             if (quarto != null) {
                 Hospedagem antiga = new Hospedagem();
                 antiga.setNome("Marcos");
@@ -43,14 +36,14 @@ public class DataInitializer {
                 antiga.setQuarto(quarto);
                 antiga.setDataEntrada(LocalDate.of(2024, 12, 20));
                 antiga.setDataSaida(LocalDate.of(2024, 12, 25));
-                antiga.setValorDiaria(100.0);
-                antiga.setValorTotal(500.0);
+                antiga.setValorDiaria(250.0);
+                antiga.setValorTotal(1250.0);
                 antiga.setFormaPagamento("Dinheiro");
                 antiga.setObservacoes("Exemplo de hospedagem finalizada.");
                 hospedagemRepository.save(antiga);
             }
 
-            // Fechamentos de caixa
+            // Fechamentos de caixa (sem alterações)
             if (fechamentoCaixaRepository.count() == 0) {
                 FechamentoCaixa semanal = new FechamentoCaixa();
                 semanal.setInicioPeriodo(LocalDate.of(2025, 6, 10));

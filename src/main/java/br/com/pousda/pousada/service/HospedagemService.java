@@ -6,12 +6,15 @@ import br.com.pousda.pousada.dto.HospedagemResponseDTO;
 import br.com.pousda.pousada.exception.*;
 import br.com.pousda.pousada.model.Hospedagem;
 import br.com.pousda.pousada.model.Quarto;
+import br.com.pousda.pousada.model.enums.StatusQuarto;
 import br.com.pousda.pousada.model.enums.TipoHospedagem;
 import br.com.pousda.pousada.repository.HospedagemRepository;
 import br.com.pousda.pousada.repository.QuartoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import javax.transaction.Transactional;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -43,8 +46,11 @@ public class HospedagemService {
         Quarto quarto = quartoRepository.findByNumero(hospedagemDTO.getNumeroQuarto())
                 .orElseThrow(() -> new QuartoNaoEncontradoException(hospedagemDTO.getNumeroQuarto()));
 
-        if (quarto.isOcupado()) {
+        if (quarto.getStatus() == StatusQuarto.OCUPADO) {
             throw new QuartoOcupadoException("O quarto " + quarto.getNumero() + " já está ocupado.");
+        }
+        if (quarto.getStatus() == StatusQuarto.MANUTENCAO) {
+            throw new QuartoOcupadoException("O quarto " + quarto.getNumero() + " está em manutenção.");
         }
 
         LocalDate dataEntrada = LocalDate.now();
@@ -70,7 +76,7 @@ public class HospedagemService {
             hospedagem.setTipo(TipoHospedagem.NORMAL);
         }
 
-        quarto.setOcupado(true);
+        quarto.setStatus(StatusQuarto.OCUPADO);
         quartoRepository.save(quarto);
 
         return hospedagemRepository.save(hospedagem);
@@ -87,7 +93,7 @@ public class HospedagemService {
         Quarto quarto = quartoRepository.findByNumero(checkoutDTO.getNumeroQuarto())
                 .orElseThrow(() -> new QuartoNaoEncontradoException(checkoutDTO.getNumeroQuarto()));
 
-        if (!quarto.isOcupado()) {
+        if (quarto.getStatus() != StatusQuarto.OCUPADO) {
             throw new QuartoJaLivreException("O quarto " + quarto.getNumero() + " já está livre.");
         }
 
@@ -110,7 +116,7 @@ public class HospedagemService {
                 (hospedagem.getObservacoes() != null ? hospedagem.getObservacoes() + " | " : "") + novaObs
         );
 
-        quarto.setOcupado(false);
+        quarto.setStatus(StatusQuarto.DISPONIVEL);
         quartoRepository.save(quarto);
 
         return hospedagemRepository.save(hospedagem);
@@ -158,6 +164,8 @@ public class HospedagemService {
         if (h.getDataEntrada() != null && h.getDataSaida() != null) {
             numeroDiarias = (int) ChronoUnit.DAYS.between(h.getDataEntrada(), h.getDataSaida());
         }
+        // Exibe true se status == OCUPADO, false caso contrário
+        boolean ocupado = h.getQuarto().getStatus() == StatusQuarto.OCUPADO;
         return new HospedagemResponseDTO(
                 h.getId(),
                 h.getTipo().toString(),
@@ -171,7 +179,7 @@ public class HospedagemService {
                 h.getFormaPagamento(),
                 h.getObservacoes(),
                 h.getQuarto().getNumero(),
-                h.getQuarto().isOcupado(),
+                ocupado,
                 status
         );
     }
@@ -208,16 +216,19 @@ public class HospedagemService {
             Quarto novoQuarto = quartoRepository.findByNumero(dto.getNumeroQuarto())
                     .orElseThrow(() -> new QuartoNaoEncontradoException(dto.getNumeroQuarto()));
 
-            if (novoQuarto.isOcupado()) {
+            if (novoQuarto.getStatus() == StatusQuarto.OCUPADO) {
                 throw new QuartoOcupadoException("O quarto " + novoQuarto.getNumero() + " já está ocupado.");
+            }
+            if (novoQuarto.getStatus() == StatusQuarto.MANUTENCAO) {
+                throw new QuartoOcupadoException("O quarto " + novoQuarto.getNumero() + " está em manutenção.");
             }
 
             // Libera o quarto antigo
-            hospedagem.getQuarto().setOcupado(false);
+            hospedagem.getQuarto().setStatus(StatusQuarto.DISPONIVEL);
             quartoRepository.save(hospedagem.getQuarto());
 
             // Ocupa o novo quarto
-            novoQuarto.setOcupado(true);
+            novoQuarto.setStatus(StatusQuarto.OCUPADO);
             quartoRepository.save(novoQuarto);
 
             // Atualiza hospedagem
@@ -227,5 +238,26 @@ public class HospedagemService {
         return hospedagemRepository.save(hospedagem);
     }
 
+    @Transactional
+    @Scheduled(cron = "0 0 12 * * *") // Meio-dia, todo dia
+    public void checkoutAutomaticoDiario() {
+        LocalDate hoje = LocalDate.now();
 
+        // Busca hospedagens onde a data de saída já passou e o quarto ainda está OCUPADO
+        List<Hospedagem> vencidas = hospedagemRepository.findAll().stream()
+                .filter(h -> h.getDataSaida() != null && h.getDataSaida().isBefore(hoje))
+                .filter(h -> h.getQuarto().getStatus() == StatusQuarto.OCUPADO)
+                .collect(Collectors.toList());
+
+        for (Hospedagem hospedagem : vencidas) {
+            Quarto quarto = hospedagem.getQuarto();
+            quarto.setStatus(StatusQuarto.DISPONIVEL);
+            quartoRepository.save(quarto);
+
+            String obs = (hospedagem.getObservacoes() != null ? hospedagem.getObservacoes() + " | " : "")
+                    + "Checkout automático em " + hoje;
+            hospedagem.setObservacoes(obs);
+            hospedagemRepository.save(hospedagem);
+        }
+    }
 }

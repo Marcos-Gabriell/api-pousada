@@ -56,7 +56,7 @@ public class HospedagemController {
     public ResponseEntity<?> relatorioFiltrado(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim,
-            @RequestParam(required = false) String tipo, // Recebe como String
+            @RequestParam(required = false) String tipo,
             @RequestParam(required = false) String nome,
             @RequestParam(required = false) Boolean ativo,
             @RequestParam(required = false) Boolean incluirCanceladas
